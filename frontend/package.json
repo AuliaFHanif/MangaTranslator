@@ -1,0 +1,16 @@
+{
+  "name": "manga-translator",
+  "version": "1.0.0",
+  "description": "",
+  "license": "MIT",
+  "author": "Farhan Hanif",
+  "type": "commonjs",
+  "main": "main.js",
+  "scripts": {
+    "test": "echo \"Error: no test specified\" && exit 1",
+    "start": "electron ."
+  },
+  "devDependencies": {
+    "electron": "^41.0.0"
+  }
+}
