@@ -19,5 +19,8 @@ services:
       - "debug"
     volumes:
       - ./backend/app:/app/app
+      # Mount your entire D drive so Docker can read manga folders
+      - /d:/mnt/d
+      - /c:/mnt/c
     environment:
       - DEBUG=true

@@ -7,12 +7,13 @@
   "scripts": {
     "dev": "vite",
     "build": "tsc && vite build",
+    "build:electron": "node -e \"const e=require('esbuild');e.buildSync({entryPoints:['electron/electron.main.ts'],bundle:true,platform:'node',outfile:'dist-electron/main.js',external:['electron'],format:'cjs'});e.buildSync({entryPoints:['electron/electron.preload.ts'],bundle:true,platform:'node',outfile:'dist-electron/preload.js',external:['electron'],format:'cjs'})\"",
     "typecheck": "tsc --noEmit",
     "lint": "eslint src --ext .ts,.tsx --report-unused-disable-directives --max-warnings 0",
     "test": "vitest run",
     "test:watch": "vitest",
-    "electron:dev": "concurrently \"npm run dev\" \"wait-on http://localhost:5173 && electron .\"",
-    "electron:build": "npm run build && electron-builder --win"
+    "electron:dev": "concurrently \"npm run dev\" \"npm run build:electron && node wait-dev.cjs\"",
+    "electron:build": "npm run build && npm run build:electron && electron-builder --win"
   },
   "dependencies": {
     "@tanstack/react-query": "^5.56.2",
