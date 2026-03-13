@@ -1,4 +1,4 @@
-const DEFAULT_BACKEND_URL = "http://127.0.0.1:8001";
+const DEFAULT_BACKEND_URL = "http://127.0.0.1:8011";
 
 let backendUrl = DEFAULT_BACKEND_URL;
 let backendUrlPromise: Promise<string> | null = null;

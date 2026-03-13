@@ -3,7 +3,8 @@ import { useProjectStore } from "@/stores/projectStore";
 import { openProject } from "@/ipc/api";
 
 export function WelcomeScreen() {
-  const { setProject, setLoading, setError, isLoading } = useProjectStore();
+  const { setProject, setLoading, setError, isLoading, error } =
+    useProjectStore();
   const [elapsed, setElapsed] = useState(0);
   const intervalRef = useRef<ReturnType<typeof setInterval> | null>(null);
 
@@ -117,9 +118,9 @@ export function WelcomeScreen() {
         </div>
 
         {/* Error display */}
-        {useProjectStore.getState().error && (
+        {error && (
           <p className="mt-4 font-mono text-xs text-red-400 border border-red-900/50 px-3 py-2">
-            {useProjectStore.getState().error}
+            {error}
           </p>
         )}
 

@@ -81,11 +81,9 @@ export function usePipelineSocket() {
 
       ws.onerror = (e) => {
         console.warn("[pipeline ws] error", e);
-        // Only close if the socket is open or connecting — avoids double-close noise
-        if (
-          ws.readyState === WebSocket.OPEN ||
-          ws.readyState === WebSocket.CONNECTING
-        ) {
+        // Let the browser close CONNECTING sockets itself; forcing close there
+        // can emit a misleading "closed before the connection is established" warning.
+        if (ws.readyState === WebSocket.OPEN) {
           ws.close();
         }
       };
@@ -97,11 +95,7 @@ export function usePipelineSocket() {
       unmounted.current = true;
       if (reconnectTimer.current) clearTimeout(reconnectTimer.current);
       const ws = wsRef.current;
-      if (
-        ws &&
-        ws.readyState !== WebSocket.CLOSED &&
-        ws.readyState !== WebSocket.CLOSING
-      ) {
+      if (ws && ws.readyState === WebSocket.OPEN) {
         ws.close();
       }
     };

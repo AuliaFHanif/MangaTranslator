@@ -28,7 +28,7 @@ var import_http = __toESM(require("http"));
 var import_path = __toESM(require("path"));
 var import_child_process = require("child_process");
 var isDev = process.env.NODE_ENV === "development";
-var backendPort = isDev ? 8001 : 8e3;
+var backendPort = isDev ? 8011 : 8e3;
 var mainWindow = null;
 var backendProcess = null;
 var BACKEND_HEALTH_PATH = "/health/";
@@ -43,8 +43,7 @@ function getDevPythonCommand() {
     "--host",
     "127.0.0.1",
     "--port",
-    String(backendPort),
-    "--reload"
+    String(backendPort)
   ];
   const configuredPython = process.env.MANGA_TRANSLATOR_PYTHON;
   if (configuredPython) {
@@ -108,9 +107,38 @@ function stopBackend() {
   }
   backendProcess = null;
 }
+function killStaleDevBackendOnPort(port) {
+  if (process.platform !== "win32") return;
+  const netstat = (0, import_child_process.spawnSync)("netstat", ["-ano", "-p", "tcp"], {
+    encoding: "utf8"
+  });
+  if (netstat.status !== 0 || !netstat.stdout) return;
+  const pidSet = /* @__PURE__ */ new Set();
+  const portNeedle = `127.0.0.1:${port}`;
+  for (const line of netstat.stdout.split(/\r?\n/)) {
+    const trimmed = line.trim();
+    if (!trimmed || !trimmed.includes("LISTENING") || !trimmed.includes(portNeedle)) {
+      continue;
+    }
+    const parts = trimmed.split(/\s+/);
+    const pid = parts[parts.length - 1];
+    if (!pid || Number(pid) === process.pid) continue;
+    pidSet.add(pid);
+  }
+  for (const pid of pidSet) {
+    (0, import_child_process.spawnSync)("taskkill", ["/pid", pid, "/t", "/f"], {
+      stdio: "ignore",
+      shell: false
+    });
+    console.warn(
+      `[backend] terminated stale listener on port ${port} (pid=${pid})`
+    );
+  }
+}
 function startBackend() {
   const backendPath = isDev ? import_path.default.join(__dirname, "../../backend") : import_path.default.join(process.resourcesPath, "backend");
   if (isDev) {
+    killStaleDevBackendOnPort(backendPort);
     const { command, args } = getDevPythonCommand();
     backendProcess = (0, import_child_process.spawn)(command, args, {
       cwd: backendPath,

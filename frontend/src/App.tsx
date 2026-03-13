@@ -4,38 +4,70 @@ import { Titlebar } from "@/components/Titlebar";
 import { PageSidebar } from "@/components/PageSidebar";
 import { PagePreview } from "@/components/PagePreview";
 import { WelcomeScreen } from "@/components/WelcomeScreen";
-import { getBackendUrlSync } from "@/ipc/backend";
+import { startPipeline, stopPipeline } from "@/ipc/api";
+
+function ErrorBanner() {
+  const { error, setError } = useProjectStore();
+
+  if (!error) return null;
+
+  return (
+    <div className="px-3 py-2 border-b border-red-900/60 bg-red-950/40 flex items-start justify-between gap-3 flex-shrink-0">
+      <p className="font-mono text-xs text-red-300 leading-relaxed">{error}</p>
+      <button
+        onClick={() => setError(null)}
+        className="px-2 py-1 border border-red-800/80 text-red-300 hover:bg-red-900/40 font-mono text-[10px] transition-colors"
+      >
+        DISMISS
+      </button>
+    </div>
+  );
+}
 
 function RunButton() {
-  const { project, isPipelineRunning, setPipelineRunning } = useProjectStore();
+  const { project, isPipelineRunning, setPipelineRunning, setError } =
+    useProjectStore();
 
   if (!project) return null;
 
-  const pendingCount = project.pages.filter(
-    (p) => p.status === "pending",
+  const runnableCount = project.pages.filter(
+    (p) => p.status === "pending" || p.status === "error",
   ).length;
 
   async function handleRun() {
     if (!project) return;
-    setPipelineRunning(true);
+    setError(null);
     try {
-      await fetch(`${getBackendUrlSync()}/pipeline/start`, {
-        method: "POST",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ folder_path: project.folder_path }),
-      });
+      const res = await startPipeline(project.folder_path);
+      setPipelineRunning(Boolean(res?.is_running));
+      if (!res?.enqueued) {
+        const statusSummary = res?.status_counts
+          ? Object.entries(res.status_counts)
+              .map(([status, count]) => `${status}: ${count}`)
+              .join(", ")
+          : null;
+        const message = statusSummary
+          ? `Pipeline did not enqueue any pages. Current statuses: ${statusSummary}.`
+          : "Pipeline did not enqueue any pages.";
+        setError(message);
+        console.warn("Pipeline started but no runnable pages were enqueued.", {
+          statusCounts: res?.status_counts,
+        });
+      }
     } catch (e) {
       console.error("Failed to start pipeline", e);
       setPipelineRunning(false);
+      setError(e instanceof Error ? e.message : "Failed to start pipeline");
     }
   }
 
   async function handleStop() {
-    setPipelineRunning(false);
     try {
-      await fetch(`${getBackendUrlSync()}/pipeline/stop`, { method: "POST" });
+      await stopPipeline();
+      setPipelineRunning(false);
     } catch (e) {
       console.error("Failed to stop pipeline", e);
+      setError(e instanceof Error ? e.message : "Failed to stop pipeline");
     }
   }
 
@@ -56,15 +88,15 @@ function RunButton() {
   return (
     <button
       onClick={handleRun}
-      disabled={pendingCount === 0}
+      disabled={runnableCount === 0}
       className="flex items-center gap-2 px-3 py-1
         bg-amber-500 hover:bg-amber-400 disabled:bg-zinc-700
         text-zinc-950 disabled:text-zinc-500
         font-mono text-xs font-bold transition-colors"
     >
       ▶ RUN
-      {pendingCount > 0 && (
-        <span className="bg-zinc-950/30 px-1">{pendingCount}</span>
+      {runnableCount > 0 && (
+        <span className="bg-zinc-950/30 px-1">{runnableCount}</span>
       )}
     </button>
   );
@@ -83,6 +115,8 @@ export default function App() {
         <Titlebar />
         <RunButton />
       </div>
+
+      <ErrorBanner />
 
       {/* Main content */}
       <div className="flex flex-1 overflow-hidden">

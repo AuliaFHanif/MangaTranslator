@@ -83,10 +83,20 @@ async def start_pipeline(req: StartPipelineRequest) -> dict:
     if not Project.exists(req.folder_path):
         raise HTTPException(status_code=404, detail="No project.json found. Open the folder first.")
 
+    project = Project.load(req.folder_path)
+    status_counts: dict[str, int] = {}
+    for page in project.pages:
+        key = page.status.value if hasattr(page.status, "value") else str(page.status)
+        status_counts[key] = status_counts.get(key, 0) + 1
+
     count = pipeline_worker.enqueue_project(req.folder_path)
     pipeline_worker.start()
 
-    return {"enqueued": count, "is_running": pipeline_worker.is_running}
+    return {
+        "enqueued": count,
+        "is_running": pipeline_worker.is_running,
+        "status_counts": status_counts,
+    }
 
 
 @router.post("/stop")

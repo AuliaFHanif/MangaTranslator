@@ -1,10 +1,10 @@
 import { app, BrowserWindow, ipcMain, dialog } from "electron";
 import http from "http";
 import path from "path";
-import { spawn, ChildProcess } from "child_process";
+import { spawn, spawnSync, ChildProcess } from "child_process";
 
 const isDev = process.env.NODE_ENV === "development";
-const backendPort = isDev ? 8001 : 8000;
+const backendPort = isDev ? 8011 : 8000;
 
 let mainWindow: BrowserWindow | null = null;
 let backendProcess: ChildProcess | null = null;
@@ -23,7 +23,6 @@ function getDevPythonCommand(): { command: string; args: string[] } {
     "127.0.0.1",
     "--port",
     String(backendPort),
-    "--reload",
   ];
 
   const configuredPython = process.env.MANGA_TRANSLATOR_PYTHON;
@@ -102,6 +101,44 @@ function stopBackend(): void {
   backendProcess = null;
 }
 
+function killStaleDevBackendOnPort(port: number): void {
+  if (process.platform !== "win32") return;
+
+  const netstat = spawnSync("netstat", ["-ano", "-p", "tcp"], {
+    encoding: "utf8",
+  });
+  if (netstat.status !== 0 || !netstat.stdout) return;
+
+  const pidSet = new Set<string>();
+  const portNeedle = `127.0.0.1:${port}`;
+
+  for (const line of netstat.stdout.split(/\r?\n/)) {
+    const trimmed = line.trim();
+    if (
+      !trimmed ||
+      !trimmed.includes("LISTENING") ||
+      !trimmed.includes(portNeedle)
+    ) {
+      continue;
+    }
+
+    const parts = trimmed.split(/\s+/);
+    const pid = parts[parts.length - 1];
+    if (!pid || Number(pid) === process.pid) continue;
+    pidSet.add(pid);
+  }
+
+  for (const pid of pidSet) {
+    spawnSync("taskkill", ["/pid", pid, "/t", "/f"], {
+      stdio: "ignore",
+      shell: false,
+    });
+    console.warn(
+      `[backend] terminated stale listener on port ${port} (pid=${pid})`,
+    );
+  }
+}
+
 // ─── Backend process ──────────────────────────────────────────────────────────
 
 function startBackend(): void {
@@ -110,6 +147,9 @@ function startBackend(): void {
     : path.join(process.resourcesPath, "backend");
 
   if (isDev) {
+    // Prevent stale uvicorn instances from shadowing updated backend code.
+    killStaleDevBackendOnPort(backendPort);
+
     const { command, args } = getDevPythonCommand();
 
     backendProcess = spawn(command, args, {

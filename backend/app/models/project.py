@@ -61,7 +61,8 @@ class Project(BaseModel):
     def load(cls, folder_path: str) -> Project:
         """Load project.json from a folder."""
         project_file = Path(folder_path) / "project.json"
-        return cls.model_validate_json(project_file.read_text(encoding="utf-8"))
+        # Accept both UTF-8 and UTF-8 with BOM to be resilient to editor/tool differences.
+        return cls.model_validate_json(project_file.read_text(encoding="utf-8-sig"))
 
     @classmethod
     def exists(cls, folder_path: str) -> bool:
