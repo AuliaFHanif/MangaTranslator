@@ -2,23 +2,38 @@
 
 from contextlib import asynccontextmanager
 from collections.abc import AsyncGenerator
+import logging
 
 from fastapi import FastAPI
 from fastapi.middleware.cors import CORSMiddleware
 
 from app.core.config import settings
+from app.core.model_manager import model_manager
 from app.api import health, projects, pipeline
+
+logger = logging.getLogger(__name__)
 
 
 @asynccontextmanager
 async def lifespan(app: FastAPI) -> AsyncGenerator[None, None]:
+    # ── Startup ───────────────────────────────────────────────────────────────
+    logger.info("Loading models into VRAM...")
+    try:
+        model_manager.load()
+    except Exception as e:
+        logger.error(f"Failed to load models: {e}")
+        logger.warning("Backend will start but pipeline will not work until models load.")
     yield
+    # ── Shutdown ──────────────────────────────────────────────────────────────
+    logger.info("Shutting down pipeline worker...")
+    from app.core.pipeline_worker import pipeline_worker
+    pipeline_worker.stop()
 
 
 def create_app() -> FastAPI:
     app = FastAPI(
         title="Manga Translator API",
-        version="0.1.0",
+        version="0.2.0",
         lifespan=lifespan,
     )
 

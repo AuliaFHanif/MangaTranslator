@@ -1,8 +1,15 @@
 import { create } from "zustand";
 
 export type PageStatus =
-  | "pending" | "detecting" | "ocr" | "translating"
-  | "inpainting" | "typesetting" | "review" | "done" | "error";
+  | "pending"
+  | "detecting"
+  | "ocr"
+  | "translating"
+  | "inpainting"
+  | "typesetting"
+  | "review"
+  | "done"
+  | "error";
 
 export interface PageRecord {
   id: string;
@@ -39,12 +46,19 @@ interface ProjectStore {
   selectedPageIndex: number;
   isLoading: boolean;
   error: string | null;
+  isPipelineRunning: boolean;
 
   setProject: (project: Project) => void;
   setSelectedPage: (index: number) => void;
   clearProject: () => void;
   setError: (error: string | null) => void;
   setLoading: (loading: boolean) => void;
+  setPipelineRunning: (running: boolean) => void;
+  updatePageStatus: (
+    pageIndex: number,
+    status: PageStatus,
+    errorMessage?: string,
+  ) => void;
 }
 
 export const useProjectStore = create<ProjectStore>((set) => ({
@@ -52,10 +66,23 @@ export const useProjectStore = create<ProjectStore>((set) => ({
   selectedPageIndex: 0,
   isLoading: false,
   error: null,
+  isPipelineRunning: false,
 
   setProject: (project) => set({ project, selectedPageIndex: 0, error: null }),
   setSelectedPage: (index) => set({ selectedPageIndex: index }),
   clearProject: () => set({ project: null, selectedPageIndex: 0 }),
   setError: (error) => set({ error }),
   setLoading: (isLoading) => set({ isLoading }),
+  setPipelineRunning: (isPipelineRunning) => set({ isPipelineRunning }),
+
+  updatePageStatus: (pageIndex, status, errorMessage) =>
+    set((state) => {
+      if (!state.project) return {};
+      const pages = state.project.pages.map((p) =>
+        p.index === pageIndex
+          ? { ...p, status, error_message: errorMessage ?? p.error_message }
+          : p,
+      );
+      return { project: { ...state.project, pages } };
+    }),
 }));

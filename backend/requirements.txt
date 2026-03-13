@@ -1,12 +1,25 @@
+# Web framework
 fastapi==0.115.0
 uvicorn[standard]==0.30.6
 pydantic==2.8.2
 pydantic-settings==2.4.0
 websockets==13.0
 httpx==0.27.2
+
+# Image processing
 pillow==11.0.0
 opencv-python-headless==4.10.0.84
-numpy==2.1.1
-torch==2.4.1
-torchvision==0.19.1
+numpy>=1.23.0,<2.0.0
+
+# PyTorch — CUDA 12.1 build (install manually, see below)
+# pip install torch torchvision --index-url https://download.pytorch.org/whl/cu121
+torch==2.4.1+cu121
+torchvision==0.19.1+cu121
+
+# Vision pipeline
+ultralytics==8.3.0
+manga-ocr==0.1.12
+huggingface-hub==0.25.1
+
+# LM Studio
 lmstudio==1.5.0

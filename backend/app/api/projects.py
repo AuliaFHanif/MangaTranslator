@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+import logging
 from pathlib import Path
 
 from fastapi import APIRouter, HTTPException
@@ -11,6 +12,7 @@ from pydantic import BaseModel
 from app.core.project_service import load_or_create_project
 from app.models.project import Project
 
+logger = logging.getLogger(__name__)
 router = APIRouter()
 
 
@@ -33,17 +35,27 @@ async def open_project(req: OpenProjectRequest) -> OpenProjectResponse:
     Open or create a project from a folder path.
     Called after the user picks a folder via the OS dialog.
     """
+    logger.info("[projects.open] request received for %s", req.folder_path)
     folder = Path(req.folder_path)
     if not folder.exists():
+        logger.warning("[projects.open] folder does not exist: %s", req.folder_path)
         raise HTTPException(status_code=404, detail=f"Folder not found: {req.folder_path}")
     if not folder.is_dir():
+        logger.warning("[projects.open] path is not a directory: %s", req.folder_path)
         raise HTTPException(status_code=400, detail="Path must be a directory")
 
     try:
         project, was_created = load_or_create_project(req.folder_path)
     except ValueError as e:
+        logger.warning("[projects.open] failed for %s: %s", req.folder_path, e)
         raise HTTPException(status_code=400, detail=str(e)) from e
 
+    logger.info(
+        "[projects.open] completed for %s (created=%s, pages=%s)",
+        req.folder_path,
+        was_created,
+        len(project.pages),
+    )
     return OpenProjectResponse(project=project, was_created=was_created)
 
 

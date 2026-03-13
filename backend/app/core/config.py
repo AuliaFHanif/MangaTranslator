@@ -9,5 +9,6 @@ class Settings(BaseSettings):
     lmstudio_port: int = 1234
     max_concurrent_pages: int = 2
     job_queue_max_size: int = 500
+    hf_token: str | None = None
 
 settings = Settings()

@@ -24,26 +24,102 @@ var __toESM = (mod, isNodeMode, target) => (target = mod != null ? __create(__ge
 
 // electron/electron.main.ts
 var import_electron = require("electron");
+var import_http = __toESM(require("http"));
 var import_path = __toESM(require("path"));
 var import_child_process = require("child_process");
 var isDev = process.env.NODE_ENV === "development";
 var backendPort = isDev ? 8001 : 8e3;
 var mainWindow = null;
 var backendProcess = null;
+var BACKEND_HEALTH_PATH = "/health/";
+var BACKEND_STARTUP_TIMEOUT_MS = 2e4;
+var BACKEND_POLL_INTERVAL_MS = 500;
+var WINDOW_SHOW_FALLBACK_MS = 1500;
+function getDevPythonCommand() {
+  const backendArgs = [
+    "-m",
+    "uvicorn",
+    "app.main:app",
+    "--host",
+    "127.0.0.1",
+    "--port",
+    String(backendPort),
+    "--reload"
+  ];
+  const configuredPython = process.env.MANGA_TRANSLATOR_PYTHON;
+  if (configuredPython) {
+    return { command: configuredPython, args: backendArgs };
+  }
+  if (process.platform === "win32") {
+    return { command: "py", args: ["-3.12", ...backendArgs] };
+  }
+  return { command: "python3.12", args: backendArgs };
+}
+function waitForBackendReady() {
+  const startedAt = Date.now();
+  return new Promise((resolve, reject) => {
+    const tryConnect = () => {
+      if (!backendProcess) {
+        reject(new Error("Backend process exited before becoming ready."));
+        return;
+      }
+      const req = import_http.default.get(
+        `http://127.0.0.1:${backendPort}${BACKEND_HEALTH_PATH}`,
+        (res) => {
+          res.resume();
+          if (res.statusCode && res.statusCode >= 200 && res.statusCode < 300) {
+            resolve();
+            return;
+          }
+          if (Date.now() - startedAt >= BACKEND_STARTUP_TIMEOUT_MS) {
+            reject(
+              new Error(
+                `Backend health check failed with status ${res.statusCode}.`
+              )
+            );
+            return;
+          }
+          setTimeout(tryConnect, BACKEND_POLL_INTERVAL_MS);
+        }
+      );
+      req.on("error", () => {
+        if (Date.now() - startedAt >= BACKEND_STARTUP_TIMEOUT_MS) {
+          reject(new Error("Timed out waiting for backend readiness."));
+          return;
+        }
+        setTimeout(tryConnect, BACKEND_POLL_INTERVAL_MS);
+      });
+    };
+    tryConnect();
+  });
+}
+function stopBackend() {
+  if (!backendProcess?.pid) {
+    backendProcess = null;
+    return;
+  }
+  if (process.platform === "win32") {
+    (0, import_child_process.spawn)("taskkill", ["/pid", String(backendProcess.pid), "/t", "/f"], {
+      stdio: "ignore",
+      shell: false
+    });
+  } else {
+    backendProcess.kill("SIGTERM");
+  }
+  backendProcess = null;
+}
 function startBackend() {
   const backendPath = isDev ? import_path.default.join(__dirname, "../../backend") : import_path.default.join(process.resourcesPath, "backend");
   if (isDev) {
-    const devCommand = [
-      `py -3.12 -m uvicorn app.main:app --host 127.0.0.1 --port ${backendPort} --reload`,
-      `C:/Users/fhani/AppData/Local/Microsoft/WindowsApps/python3.12.exe -m uvicorn app.main:app --host 127.0.0.1 --port ${backendPort} --reload`,
-      `py -m uvicorn app.main:app --host 127.0.0.1 --port ${backendPort} --reload`,
-      `python -m uvicorn app.main:app --host 127.0.0.1 --port ${backendPort} --reload`,
-      `uvicorn app.main:app --host 127.0.0.1 --port ${backendPort} --reload`
-    ].join(" || ");
-    backendProcess = (0, import_child_process.spawn)(devCommand, {
+    const { command, args } = getDevPythonCommand();
+    backendProcess = (0, import_child_process.spawn)(command, args, {
       cwd: backendPath,
       stdio: "pipe",
-      shell: true
+      shell: false,
+      env: {
+        ...process.env,
+        PYTHONUNBUFFERED: "1"
+      }
     });
   } else {
     backendProcess = (0, import_child_process.spawn)(import_path.default.join(backendPath, "manga_backend.exe"), [], {
@@ -76,13 +152,33 @@ function createWindow() {
     backgroundColor: "#0a0a0a",
     show: false
   });
+  let didShowWindow = false;
+  const showWindow = () => {
+    if (!mainWindow || didShowWindow) return;
+    didShowWindow = true;
+    mainWindow.show();
+    mainWindow.focus();
+    if (isDev) {
+      mainWindow.webContents.openDevTools({ mode: "detach" });
+    }
+  };
   if (isDev) {
     mainWindow.loadURL("http://localhost:5173");
-    mainWindow.webContents.openDevTools();
   } else {
     mainWindow.loadFile(import_path.default.join(__dirname, "../dist/index.html"));
   }
-  mainWindow.once("ready-to-show", () => mainWindow?.show());
+  mainWindow.once("ready-to-show", showWindow);
+  mainWindow.webContents.once("did-finish-load", showWindow);
+  mainWindow.webContents.on(
+    "did-fail-load",
+    (_event, errorCode, errorDescription) => {
+      console.error(
+        `[renderer:err] Failed to load window (${errorCode}): ${errorDescription}`
+      );
+      showWindow();
+    }
+  );
+  setTimeout(showWindow, WINDOW_SHOW_FALLBACK_MS);
   mainWindow.on("closed", () => {
     mainWindow = null;
   });
@@ -98,12 +194,17 @@ import_electron.ipcMain.handle("open-folder-dialog", async () => {
   if (result.canceled || result.filePaths.length === 0) return null;
   return result.filePaths[0];
 });
-import_electron.app.whenReady().then(() => {
+import_electron.app.whenReady().then(async () => {
   startBackend();
   createWindow();
+  try {
+    await waitForBackendReady();
+  } catch (error) {
+    console.error("[backend:err]", error);
+  }
 });
 import_electron.app.on("window-all-closed", () => {
-  if (backendProcess) backendProcess.kill();
+  stopBackend();
   if (process.platform !== "darwin") import_electron.app.quit();
 });
 import_electron.app.on("activate", () => {
