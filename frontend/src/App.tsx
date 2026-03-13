@@ -31,7 +31,14 @@ function RunButton() {
   if (!project) return null;
 
   const runnableCount = project.pages.filter(
-    (p) => p.status === "pending" || p.status === "error",
+    (p) =>
+      p.status === "pending" ||
+      p.status === "detecting" ||
+      p.status === "ocr" ||
+      p.status === "error" ||
+      p.status === "translating" ||
+      p.status === "inpainting" ||
+      p.status === "typesetting",
   ).length;
 
   async function handleRun() {

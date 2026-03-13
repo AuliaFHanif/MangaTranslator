@@ -24,6 +24,7 @@ var __toESM = (mod, isNodeMode, target) => (target = mod != null ? __create(__ge
 
 // electron/electron.main.ts
 var import_electron = require("electron");
+var import_fs = __toESM(require("fs"));
 var import_http = __toESM(require("http"));
 var import_path = __toESM(require("path"));
 var import_child_process = require("child_process");
@@ -35,7 +36,7 @@ var BACKEND_HEALTH_PATH = "/health/";
 var BACKEND_STARTUP_TIMEOUT_MS = 2e4;
 var BACKEND_POLL_INTERVAL_MS = 500;
 var WINDOW_SHOW_FALLBACK_MS = 1500;
-function getDevPythonCommand() {
+function getDevPythonCommand(backendPath) {
   const backendArgs = [
     "-m",
     "uvicorn",
@@ -48,6 +49,10 @@ function getDevPythonCommand() {
   const configuredPython = process.env.MANGA_TRANSLATOR_PYTHON;
   if (configuredPython) {
     return { command: configuredPython, args: backendArgs };
+  }
+  const localVenvPython = process.platform === "win32" ? import_path.default.join(backendPath, ".venv", "Scripts", "python.exe") : import_path.default.join(backendPath, ".venv", "bin", "python");
+  if (import_fs.default.existsSync(localVenvPython)) {
+    return { command: localVenvPython, args: backendArgs };
   }
   if (process.platform === "win32") {
     return { command: "py", args: ["-3.12", ...backendArgs] };
@@ -139,7 +144,7 @@ function startBackend() {
   const backendPath = isDev ? import_path.default.join(__dirname, "../../backend") : import_path.default.join(process.resourcesPath, "backend");
   if (isDev) {
     killStaleDevBackendOnPort(backendPort);
-    const { command, args } = getDevPythonCommand();
+    const { command, args } = getDevPythonCommand(backendPath);
     backendProcess = (0, import_child_process.spawn)(command, args, {
       cwd: backendPath,
       stdio: "pipe",

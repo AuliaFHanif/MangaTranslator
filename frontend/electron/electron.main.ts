@@ -1,4 +1,5 @@
 import { app, BrowserWindow, ipcMain, dialog } from "electron";
+import fs from "fs";
 import http from "http";
 import path from "path";
 import { spawn, spawnSync, ChildProcess } from "child_process";
@@ -14,7 +15,10 @@ const BACKEND_STARTUP_TIMEOUT_MS = 20_000;
 const BACKEND_POLL_INTERVAL_MS = 500;
 const WINDOW_SHOW_FALLBACK_MS = 1_500;
 
-function getDevPythonCommand(): { command: string; args: string[] } {
+function getDevPythonCommand(backendPath: string): {
+  command: string;
+  args: string[];
+} {
   const backendArgs = [
     "-m",
     "uvicorn",
@@ -28,6 +32,14 @@ function getDevPythonCommand(): { command: string; args: string[] } {
   const configuredPython = process.env.MANGA_TRANSLATOR_PYTHON;
   if (configuredPython) {
     return { command: configuredPython, args: backendArgs };
+  }
+
+  const localVenvPython =
+    process.platform === "win32"
+      ? path.join(backendPath, ".venv", "Scripts", "python.exe")
+      : path.join(backendPath, ".venv", "bin", "python");
+  if (fs.existsSync(localVenvPython)) {
+    return { command: localVenvPython, args: backendArgs };
   }
 
   if (process.platform === "win32") {
@@ -150,7 +162,7 @@ function startBackend(): void {
     // Prevent stale uvicorn instances from shadowing updated backend code.
     killStaleDevBackendOnPort(backendPort);
 
-    const { command, args } = getDevPythonCommand();
+    const { command, args } = getDevPythonCommand(backendPath);
 
     backendProcess = spawn(command, args, {
       cwd: backendPath,
